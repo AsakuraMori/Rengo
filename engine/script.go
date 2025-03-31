@@ -191,50 +191,52 @@ func (se *ScriptEngine) handleClearLayer(args []string) {
 
 func (se *ScriptEngine) effectCommand(command string, args []string) {
 	switch command {
-	// ... 其他现有的 case ...
-	case "fadein":
-		//duration, _ := strconv.ParseFloat(args[1], 64)
-		//se.engine.FadeIn(duration)
-		/*		speed, err := strconv.Atoi(args[4])
-				if err != nil {
-					panic(err)
-				}*/
-		id, err1 := strconv.Atoi(args[0])
-		if err1 != nil {
-			panic(err1)
+	case "transition":
+		layerIndex, _ := strconv.Atoi(args[0])
+		targetImage := args[1]
+		maskImage := args[2]
+		//speed, _ := strconv.ParseFloat(args[3], 64)
+
+		// 获取当前图层图像作为源
+		source := se.engine.Layers[layerIndex].ImageDisplay.current
+
+		// 使用ImageDisplay的LoadImage方法加载目标图像
+		targetDisplay := se.engine.Layers[layerIndex].ImageDisplay
+		if err := targetDisplay.LoadImage(targetImage, targetImage); err != nil {
+			log.Printf("加载目标图像失败: %v", err)
+			return
 		}
-		err := se.engine.EffectSystem.AddMaskEffect(se.engine.Layers[id].ImageDisplay.current, args[2], 0.01, false)
+		target := targetDisplay.images[targetImage]
+
+		// 添加渐变效果
+		err := se.engine.EffectSystem.AddTransitionEffect(
+			layerIndex,
+			source,
+			target,
+			maskImage,
+			0.01,
+		)
 		if err != nil {
-			panic(err)
+			log.Printf("添加渐变效果失败: %v", err)
 		}
-	case "fadeout":
-		speed, err := strconv.Atoi(args[4])
-		if err != nil {
-			panic(err)
-		}
-		id, err1 := strconv.Atoi(args[0])
-		if err1 != nil {
-			panic(err1)
-		}
-		err = se.engine.EffectSystem.AddMaskEffect(se.engine.Layers[id].ImageDisplay.current, args[2], float64(speed), false)
-		if err != nil {
-			panic(err)
-		}
-		//se.engine.FadeOut(duration)
+
+		// 设置目标图像为图层的新图像
+		//se.engine.Layers[layerIndex].ImageDisplay.current = target
 	}
 }
-
 func (se *ScriptEngine) handleBackgroundCommand(args []string) {
 	idx, _ := strconv.Atoi(args[0])
 	imagePath := args[1]
-	fadeCmd := args[3]
+	if len(args) > 2 {
+		fadeCmd := args[3]
+		se.effectCommand(fadeCmd, args)
+	}
 	err := se.engine.SetLayerImage(idx, "background", imagePath)
 	if err != nil {
 		log.Printf("设置背景失败: %v", err)
 	} else {
 		log.Printf("设置背景: %s", imagePath)
 	}
-	se.effectCommand(fadeCmd, args)
 }
 
 // 处理立绘命令
@@ -287,8 +289,6 @@ func (se *ScriptEngine) handleAffectionCommand(args []string) {
 	log.Printf("好感度变化: %s +%d", character, delta)
 }
 
-// 处理逻辑判断命令
-// 处理逻辑判断命令
 func (se *ScriptEngine) handleIfCommand(args []string) {
 	if args[0] == "else" {
 		// 处理 @else
@@ -365,21 +365,9 @@ func (se *ScriptEngine) skipToEndif() {
 	}
 }
 
-func (se *ScriptEngine) skipToElseOrEndif() {
-	for se.currentLine < len(se.scriptLines) {
-		line := se.scriptLines[se.currentLine]
-		if strings.HasPrefix(line, "@else") || strings.HasPrefix(line, "@endif") {
-			break
-		}
-		se.currentLine++
-	}
-}
-
 // 处理跳转命令
 func (se *ScriptEngine) handleJumpCommand(args []string) {
 	jumpTo := args[0]
 	se.pendingJump = jumpTo
 	log.Printf("设置跳转到: %s", jumpTo)
 }
-
-// 其他函数保持不变

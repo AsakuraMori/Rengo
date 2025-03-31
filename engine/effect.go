@@ -17,41 +17,43 @@ type Effect interface {
 // MaskEffect represents a mask effect
 type MaskEffect struct {
 	mask       *ebiten.Image // 遮罩图像
-	target     *ebiten.Image // 目标图像
+	source     *ebiten.Image // 源图像(渐变开始)
+	target     *ebiten.Image // 目标图像(渐变结束)
 	progress   float64       // 动画进度 (0.0 - 1.0)
 	speed      float64       // 动画速度
-	isReversed bool          // 是否反向
 	maskShader *ebiten.Shader
+	layerIndex int // 应用到的图层索引
+	engine     *Engine
 }
 
 // EffectSystem manages multiple effects
 type EffectSystem struct {
-	effects    []Effect
-	maskShader *ebiten.Shader
-	engine     *Engine
+	effects          []Effect
+	transitionShader *ebiten.Shader
+	engine           *Engine
 }
 
 // NewEffectSystem creates a new EffectSystem
 func NewEffectSystem(engine *Engine) *EffectSystem {
 
-	maskShaderRead, err := os.ReadFile("./resource/kage/mask_shader.kage")
+	transitionShaderSrc, err := os.ReadFile("./resource/kage/mask_shader.kage")
 	if err != nil {
 		panic(err)
 	}
-	maskShader, err := ebiten.NewShader(maskShaderRead)
+	transitionShader, err := ebiten.NewShader(transitionShaderSrc)
 	if err != nil {
 		panic(err)
 	}
 	e := &EffectSystem{
-		effects:    make([]Effect, 0),
-		maskShader: maskShader,
-		engine:     engine,
+		effects:          make([]Effect, 0),
+		transitionShader: transitionShader,
+		engine:           engine,
 	}
 	return e
 }
 
 // AddMaskEffect adds a mask effect
-func (es *EffectSystem) AddMaskEffect(target *ebiten.Image, maskPath string, speed float64, isReversed bool) error {
+func (es *EffectSystem) AddTransitionEffect(layerIndex int, source, target *ebiten.Image, maskPath string, speed float64) error {
 	maskFile, err := os.Open(maskPath)
 	if err != nil {
 		return fmt.Errorf("failed to open mask file: %v", err)
@@ -66,11 +68,13 @@ func (es *EffectSystem) AddMaskEffect(target *ebiten.Image, maskPath string, spe
 
 	effect := &MaskEffect{
 		mask:       mask,
+		source:     source,
 		target:     target,
 		progress:   0,
 		speed:      speed,
-		isReversed: isReversed,
-		maskShader: es.maskShader,
+		maskShader: es.transitionShader,
+		layerIndex: layerIndex,
+		engine:     es.engine,
 	}
 	es.effects = append(es.effects, effect)
 	return nil
@@ -113,21 +117,33 @@ func (m *MaskEffect) Update() bool {
 
 // Draw implements the mask effect
 func (m *MaskEffect) Draw(screen *ebiten.Image) {
-	if m.target == nil || m.mask == nil {
-		panic("target or mask is nil")
+	if m.source == nil || m.target == nil || m.mask == nil {
+		return
+	}
+
+	// 获取图层
+	layer := m.engine.Layers[m.layerIndex]
+
+	// 创建新的图像作为绘制目标
+	w, h := m.source.Size()
+	if layer.ImageDisplay.current == nil || layer.ImageDisplay.current.Bounds().Dx() != w || layer.ImageDisplay.current.Bounds().Dy() != h {
+		layer.ImageDisplay.current = ebiten.NewImage(w, h)
+	} else {
+		layer.ImageDisplay.current.Clear()
 	}
 
 	// 创建绘制选项
 	op := &ebiten.DrawRectShaderOptions{}
-	op.Images[0] = m.target // 目标图像（对应 imageSrc0）
-	op.Images[1] = m.mask   // 遮罩图像（对应 imageSrc1）
+	op.Images[0] = m.source
+	op.Images[1] = m.target
+	op.Images[2] = m.mask
 	op.Uniforms = map[string]interface{}{
-		"Progress": float32(m.progress), // 传递进度值
+		"Progress": float32(m.progress),
 	}
-	op.Blend = ebiten.BlendSourceOver
-	// 获取目标图像的尺寸
-	targetW, targetH := m.target.Size()
 
-	// 使用着色器绘制
-	screen.DrawRectShader(targetW, targetH, m.maskShader, op)
+	// 绘制到图层图像
+	layer.ImageDisplay.current.DrawRectShader(w, h, m.maskShader, op)
+
+	// 将图层绘制到屏幕
+	screen.DrawImage(layer.ImageDisplay.current, nil)
 }

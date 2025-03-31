@@ -170,14 +170,6 @@ func (e *Engine) ClearLayer(layerIndex int) error {
 	return fmt.Errorf("layer index out of range")
 }
 
-/*func (e *Engine) MoveLayer(layerIndex int, endX, endY float64, duration float64) {
-	if layerIndex >= 0 && layerIndex < len(e.Layers) {
-		layer := e.Layers[layerIndex]
-		startX, startY := layer.ImageDisplay.GetPosition()
-		e.EffectSystem.AddMove(layer.ImageDisplay.GetImage(), startX, startY, endX, endY, duration)
-	}
-}*/
-
 var isMouseButtonPressed bool // 用于记录鼠标按钮状态
 
 func (e *Engine) Update() error {
